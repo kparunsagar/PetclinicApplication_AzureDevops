@@ -1,0 +1,76 @@
+# Maven
+# Build your Java project and run tests with Apache Maven.
+# Add steps that analyze code, save build artifacts, deploy, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/languages/java
+
+trigger:
+- main
+
+pool: default
+
+steps:
+
+- task: Maven@4
+  displayName: Maven compile
+  inputs:
+    mavenPomFile: 'pom.xml'
+    goals: 'compile'
+    publishJUnitResults: true
+    testResultsFiles: '**/surefire-reports/TEST-*.xml'
+    javaHomeOption: 'JDKVersion'
+    mavenVersionOption: 'Default'
+    mavenAuthenticateFeed: false
+    effectivePomSkip: false
+    sonarQubeRunAnalysis: false
+- task: SonarQubePrepare@5
+  displayName: Sonar Analysis
+  inputs:
+    SonarQube: 'sonarserviceconnection'
+    scannerMode: 'CLI'
+    configMode: 'manual'
+    cliProjectKey: 'petclinic'
+    cliProjectName: 'petclinic'
+    cliSources: '.'
+    extraProperties: |
+      # Additional properties that will be passed to the scanner, 
+      # Put one key=value per line, example:
+      # sonar.exclusions=**/*.bin
+      sonar.java.binaries=.
+
+- task: SonarQubeAnalyze@5
+  displayName: Run code Analysis
+  inputs:
+    jdkversion: 'JAVA_HOME_11_X64'
+
+- task: SonarQubePublish@5
+  displayName: Publish Quality Gate
+  inputs:
+    pollingTimeoutSec: '300'
+- task: dependency-check-build-task@6
+  displayName: OWASP DP
+  inputs:
+    projectName: 'petclinic'
+    scanPath: '.'
+    format: 'HTML'
+    uploadReports: true
+    additionalArguments: '--disableYarnAudit'
+- task: Maven@4
+  displayName: Maven Install
+  inputs:
+    mavenPomFile: 'pom.xml'
+    goals: 'install'
+    publishJUnitResults: true
+    testResultsFiles: '**/surefire-reports/TEST-*.xml'
+    javaHomeOption: 'JDKVersion'
+    mavenVersionOption: 'Default'
+    mavenAuthenticateFeed: false
+    effectivePomSkip: false
+    sonarQubeRunAnalysis: false
+
+- task: SSH@0
+  displayName: Publish To Webserver
+  inputs:
+    sshEndpoint: 'SSH connection for tomcat'
+    runOptions: 'commands'
+    commands: 'sudo cp /home/azureuser/myagent/_work/1/s/target/petclinic.war /opt/tomcat/apache-tomcat-9.0.87/webapps'
+    readyTimeout: '20000'
